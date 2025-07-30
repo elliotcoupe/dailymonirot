@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string, jsonify
+from flask import Flask, render_template_string
 import yfinance as yf
 import datetime
 
@@ -6,120 +6,44 @@ app = Flask(__name__)
 
 TICKERS = ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "SPY"]
 
-HTML = """
-<!doctype html>
+HTML_TEMPLATE = """
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <title>12个月最高点回撤</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f7f9fc;
-            color: #333;
-            padding: 20px;
-        }
-        h2 {
-            text-align: center;
-            margin-bottom: 24px;
-            color: #222;
-        }
-        table {
-            width: 80%;
-            margin: 0 auto;
-            border-collapse: collapse;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            background-color: #fff;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        th, td {
-            padding: 12px 18px;
-            text-align: center;
-            border-bottom: 1px solid #e1e4e8;
-        }
-        th {
-            background-color: #0366d6;
-            color: #fff;
-            font-weight: 600;
-            letter-spacing: 0.03em;
-        }
-        tr:hover {
-            background-color: #f1f8ff;
-        }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stock Drawdown Monitor</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 40px; background: #f0f0f0; }
+  table { border-collapse: collapse; width: 80%; margin: auto; background: white; box-shadow: 0 0 10px rgba(0,0,0,0.1);}
+  th, td { padding: 12px; border: 1px solid #ccc; text-align: center; }
+  th { background-color: #007acc; color: white; }
+  .highlight { background-color: #ff9999; font-weight: bold; }
+  caption { margin-bottom: 10px; font-size: 1.5em; }
+</style>
 </head>
 <body>
-    <h2>股票当前价格与12个月最高价距离</h2>
-    <table id="stocks-table">
-        <thead>
-            <tr>
-                <th>股票代码</th>
-                <th>当前价格 (USD)</th>
-                <th>12个月最高价 (USD)</th>
-                <th>距离最高点 (%)</th>
-            </tr>
-        </thead>
-        <tbody>
-            <!-- JS填充 -->
-        </tbody>
-    </table>
-
-<script>
-async function fetchDataAndUpdate() {
-    try {
-        const res = await fetch('/api/data');
-        const stocks = await res.json();
-
-        const tbody = document.querySelector("#stocks-table tbody");
-        tbody.innerHTML = '';
-
-        stocks.forEach(stock => {
-            let tr = document.createElement('tr');
-
-            let tdTicker = document.createElement('td');
-            tdTicker.textContent = stock.ticker;
-            tr.appendChild(tdTicker);
-
-            let tdPrice = document.createElement('td');
-            tdPrice.textContent = stock.current_price.toFixed(2);
-            tr.appendChild(tdPrice);
-
-            let tdHigh = document.createElement('td');
-            tdHigh.textContent = stock.high_12m.toFixed(2);
-            tr.appendChild(tdHigh);
-
-            let tdDrawdown = document.createElement('td');
-            let drawdownPercent = (stock.drawdown * 100).toFixed(2);
-            tdDrawdown.textContent = drawdownPercent + '%';
-
-            if(stock.drawdown > 0.3){
-                tdDrawdown.style.color = '#ff6600';
-                tdDrawdown.style.backgroundColor = '#fff4e5';
-                tdDrawdown.style.fontWeight = '700';
-                tdDrawdown.style.borderRadius = '4px';
-                tdDrawdown.style.padding = '2px 6px';
-            } else if(stock.drawdown > 0){
-                tdDrawdown.style.color = '#d73a49';
-                tdDrawdown.style.fontWeight = '600';
-            } else {
-                tdDrawdown.style.color = '#28a745';
-                tdDrawdown.style.fontWeight = '600';
-            }
-
-            tr.appendChild(tdDrawdown);
-            tbody.appendChild(tr);
-        });
-    } catch(e) {
-        console.error('更新数据失败', e);
-    }
-}
-
-// 页面加载时调用一次，后续每2小时刷新
-fetchDataAndUpdate();
-setInterval(fetchDataAndUpdate, 2 * 60 * 60 * 1000); // 2小时毫秒数
-</script>
-
+<table>
+<caption>Stock Drawdown from 12-Month High</caption>
+<thead>
+<tr>
+<th>Ticker</th>
+<th>Current Price</th>
+<th>12-Month High</th>
+<th>Drawdown (%)</th>
+</tr>
+</thead>
+<tbody>
+{% for stock in stocks %}
+<tr class="{{ 'highlight' if stock.drawdown > 0.30 else '' }}">
+<td>{{ stock.ticker }}</td>
+<td>${{ stock.current_price }}</td>
+<td>${{ stock.high_12m }}</td>
+<td>{{ (stock.drawdown*100) | round(2) }}%</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
 </body>
 </html>
 """
@@ -131,10 +55,10 @@ def fetch_stock_data():
 
     for ticker in TICKERS:
         try:
-            ticker_obj = yf.Ticker(ticker)
-            data = ticker_obj.history(start=start_date.strftime("%Y-%m-%d"), end=end_date.strftime("%Y-%m-%d"))
+            data = yf.download(ticker, start=start_date.strftime("%Y-%m-%d"), end=end_date.strftime("%Y-%m-%d"), progress=False)
 
             if data.empty:
+                print(f"No data for {ticker}")
                 continue
 
             # 处理无时区问题
@@ -156,8 +80,9 @@ def fetch_stock_data():
                 "ticker": ticker,
                 "current_price": round(current_price, 2),
                 "high_12m": round(high_12m, 2),
-                "drawdown": round(drawdown, 4)
+                "drawdown": drawdown
             })
+
         except Exception as e:
             print(f"Error fetching data for {ticker}: {e}")
             continue
@@ -165,13 +90,9 @@ def fetch_stock_data():
     return stocks_data
 
 @app.route("/")
-def index():
-    return render_template_string(HTML)
-
-@app.route("/api/data")
-def api_data():
-    data = fetch_stock_data()
-    return jsonify(data)
+def home():
+    stocks = fetch_stock_data()
+    return render_template_string(HTML_TEMPLATE, stocks=stocks)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
