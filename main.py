@@ -133,8 +133,16 @@ def fetch_stock_data():
         try:
             ticker_obj = yf.Ticker(ticker)
             data = ticker_obj.history(start=start_date.strftime("%Y-%m-%d"), end=end_date.strftime("%Y-%m-%d"))
+
             if data.empty:
                 continue
+
+            # 处理无时区问题
+            if data.index.tz is None:
+                try:
+                    data = data.tz_localize('US/Eastern')
+                except Exception as e:
+                    print(f"Timezone localization failed for {ticker}: {e}")
 
             high_12m = data['High'].max()
             current_price = data['Close'][-1] if not data['Close'].empty else None
