@@ -1,6 +1,7 @@
 from flask import Flask, render_template_string
 import yfinance as yf
 import datetime
+import time
 
 app = Flask(__name__)
 
@@ -55,13 +56,16 @@ def fetch_stock_data():
 
     for ticker in TICKERS:
         try:
-            data = yf.download(ticker, start=start_date.strftime("%Y-%m-%d"), end=end_date.strftime("%Y-%m-%d"), progress=False)
+            data = yf.download(ticker,
+                               start=start_date.strftime("%Y-%m-%d"),
+                               end=end_date.strftime("%Y-%m-%d"),
+                               progress=False,
+                               auto_adjust=False)
 
             if data.empty:
                 print(f"No data for {ticker}")
                 continue
 
-            # 处理无时区问题
             if data.index.tz is None:
                 try:
                     data = data.tz_localize('US/Eastern')
@@ -82,6 +86,8 @@ def fetch_stock_data():
                 "high_12m": round(high_12m, 2),
                 "drawdown": drawdown
             })
+
+            time.sleep(1)  # 减缓请求频率
 
         except Exception as e:
             print(f"Error fetching data for {ticker}: {e}")
